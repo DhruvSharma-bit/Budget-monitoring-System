@@ -12,12 +12,26 @@ import { formatCurrency, formatDate } from '../utils/finance'
 
 const fundingInitialState = { name: '', amount: '' }
 const categoryInitialState = { name: '', allocated: '', paid: '0' }
+const closeFormInitialState = { closingNote: '' }
+
+const formatDateTime = (value) => {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 function EventDetailPage() {
   const { eventId } = useParams()
   const {
     events,
     canEdit,
+    canCloseEvent,
+    canReopenEvent,
     backendConnected,
     operationError,
     clearErrors,
@@ -26,12 +40,15 @@ function EventDetailPage() {
     updateEvent,
     updateFundingSource,
     updateCategory,
+    closeEvent,
+    reopenEvent,
   } = useBudget()
   const event = events.find((item) => item.id === eventId)
 
   const [isEventEditModalOpen, setEventEditModalOpen] = useState(false)
   const [isFundingModalOpen, setFundingModalOpen] = useState(false)
   const [isCategoryModalOpen, setCategoryModalOpen] = useState(false)
+  const [isCloseModalOpen, setCloseModalOpen] = useState(false)
 
   const [editingFundingId, setEditingFundingId] = useState(null)
   const [editingCategoryId, setEditingCategoryId] = useState(null)
@@ -39,6 +56,10 @@ function EventDetailPage() {
   const [eventForm, setEventForm] = useState({ name: '', date: '' })
   const [fundingForm, setFundingForm] = useState(fundingInitialState)
   const [categoryForm, setCategoryForm] = useState(categoryInitialState)
+  const [closeForm, setCloseForm] = useState(closeFormInitialState)
+
+  const isEditingFunding = editingFundingId !== null && editingFundingId !== undefined
+  const isEditingCategory = editingCategoryId !== null && editingCategoryId !== undefined
 
   if (!event) {
     return (
@@ -50,6 +71,12 @@ function EventDetailPage() {
       </div>
     )
   }
+
+  const lifecycleStatus = String(event.lifecycleStatus || event.status || 'ACTIVE').toUpperCase()
+  const isEventClosed = lifecycleStatus === 'CLOSED'
+  const canEditEventData = canEdit && !isEventClosed
+  const canCloseNow = canCloseEvent && !isEventClosed
+  const canReopenNow = canReopenEvent && isEventClosed
 
   const openEventEdit = () => {
     clearErrors()
@@ -66,7 +93,7 @@ function EventDetailPage() {
 
   const openEditFunding = (source) => {
     clearErrors()
-    setEditingFundingId(source.id)
+    setEditingFundingId(String(source.id))
     setFundingForm({
       name: source.name,
       amount: String(source.amount),
@@ -83,7 +110,7 @@ function EventDetailPage() {
 
   const openEditCategory = (category) => {
     clearErrors()
-    setEditingCategoryId(category.id)
+    setEditingCategoryId(String(category.id))
     setCategoryForm({
       name: category.name,
       allocated: String(category.allocated),
@@ -103,7 +130,7 @@ function EventDetailPage() {
   const handleFundingSubmit = async (submitEvent) => {
     submitEvent.preventDefault()
     let result
-    if (editingFundingId) {
+    if (isEditingFunding) {
       result = await updateFundingSource(eventId, editingFundingId, fundingForm)
     } else {
       result = await addFundingSource(eventId, fundingForm)
@@ -119,7 +146,7 @@ function EventDetailPage() {
   const handleCategorySubmit = async (submitEvent) => {
     submitEvent.preventDefault()
     let result
-    if (editingCategoryId) {
+    if (isEditingCategory) {
       result = await updateCategory(eventId, editingCategoryId, categoryForm)
     } else {
       result = await addCategory(eventId, categoryForm)
@@ -130,6 +157,19 @@ function EventDetailPage() {
       setEditingCategoryId(null)
       setCategoryModalOpen(false)
     }
+  }
+
+  const handleCloseEventSubmit = async (submitEvent) => {
+    submitEvent.preventDefault()
+    const result = await closeEvent(eventId, closeForm)
+    if (result.success) {
+      setCloseModalOpen(false)
+      setCloseForm(closeFormInitialState)
+    }
+  }
+
+  const handleReopenEvent = async () => {
+    await reopenEvent(eventId)
   }
 
   const categoryWarnings = event.categories.filter(
@@ -143,8 +183,31 @@ function EventDetailPage() {
         subtitle={`Event Date: ${formatDate(event.date)}`}
         action={
           <div className="flex items-center gap-2">
+            <StatusBadge status={lifecycleStatus} />
             <StatusBadge status={event.metrics.status} />
-            {canEdit ? (
+            {canCloseNow ? (
+              <button
+                type="button"
+                onClick={() => {
+                  clearErrors()
+                  setCloseForm(closeFormInitialState)
+                  setCloseModalOpen(true)
+                }}
+                className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-danger hover:bg-red-50"
+              >
+                Close Event
+              </button>
+            ) : null}
+            {canReopenNow ? (
+              <button
+                type="button"
+                onClick={handleReopenEvent}
+                className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-success hover:bg-green-50"
+              >
+                Reopen Event
+              </button>
+            ) : null}
+            {canEditEventData ? (
               <button
                 type="button"
                 onClick={openEventEdit}
@@ -159,15 +222,34 @@ function EventDetailPage() {
 
       <section className="mb-6">
         <AlertBox
-          title={canEdit ? 'Admin Edit Mode Enabled' : 'Read-Only Mode'}
+          title={canEditEventData ? 'Admin Edit Mode Enabled' : 'Read-Only Mode'}
           message={
-            canEdit
+            canEditEventData
               ? 'You have admin access to modify budget details for this event.'
-              : 'Login as admin from Settings to edit funding and category entries.'
+              : isEventClosed
+                ? 'This event is CLOSED. Updates to event, categories, and funding are disabled.'
+                : 'Login as admin from Settings to edit funding and category entries.'
           }
-          variant={canEdit ? 'info' : 'warning'}
+          variant={canEditEventData ? 'info' : 'warning'}
         />
       </section>
+
+      {isEventClosed ? (
+        <section className="panel mb-6 p-4">
+          <h3 className="text-base font-semibold text-text">Event Closure Details</h3>
+          <div className="mt-3 grid gap-3 text-sm text-muted sm:grid-cols-3">
+            <p>
+              Closed At: <span className="font-medium text-text">{formatDateTime(event.closedAt)}</span>
+            </p>
+            <p>
+              Closed By: <span className="font-medium text-text">{event.closedBy || '-'}</span>
+            </p>
+            <p>
+              Note: <span className="font-medium text-text">{event.closingNote || '-'}</span>
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard title="Total Budget" value={formatCurrency(event.metrics.totalBudget)} />
@@ -211,7 +293,7 @@ function EventDetailPage() {
             <h3 className="text-base font-semibold text-text">Funding Sources</h3>
             <p className="text-sm text-muted">Total Budget = sum of all funding sources</p>
           </div>
-          {canEdit ? (
+          {canEditEventData ? (
             <button
               type="button"
               onClick={openAddFunding}
@@ -224,7 +306,7 @@ function EventDetailPage() {
         <FundingSourceTable
           sources={event.fundingSources}
           onEditSource={openEditFunding}
-          canEdit={canEdit}
+          canEdit={canEditEventData}
           maxHeightClass="max-h-[22rem]"
         />
       </section>
@@ -240,7 +322,7 @@ function EventDetailPage() {
               <p className="text-xs font-medium uppercase tracking-wide text-muted">Remaining Budget</p>
               <p className="text-sm font-semibold text-text">{formatCurrency(event.metrics.remaining)}</p>
             </div>
-            {canEdit ? (
+            {canEditEventData ? (
               <button
                 type="button"
                 onClick={openAddCategory}
@@ -255,7 +337,7 @@ function EventDetailPage() {
           categories={event.categories}
           totalBudget={event.metrics.totalBudget}
           onEditCategory={openEditCategory}
-          canEdit={canEdit}
+          canEdit={canEditEventData}
           maxHeightClass="max-h-[30rem]"
         />
       </section>
@@ -269,6 +351,9 @@ function EventDetailPage() {
         }}
       >
         <form onSubmit={handleEventSubmit} className="space-y-4">
+          {operationError ? (
+            <AlertBox title="Update failed" message={operationError} variant="warning" />
+          ) : null}
           <div>
             <label className="mb-1 block text-sm font-medium text-muted">Event Name</label>
             <input
@@ -299,7 +384,7 @@ function EventDetailPage() {
       </Modal>
 
       <Modal
-        title={editingFundingId ? 'Edit Funding Source' : 'Add Funding Source'}
+        title={isEditingFunding ? 'Edit Funding Source' : 'Add Funding Source'}
         isOpen={isFundingModalOpen}
         onClose={() => {
           clearErrors()
@@ -307,6 +392,9 @@ function EventDetailPage() {
         }}
       >
         <form onSubmit={handleFundingSubmit} className="space-y-4">
+          {operationError ? (
+            <AlertBox title="Update failed" message={operationError} variant="warning" />
+          ) : null}
           <div>
             <label className="mb-1 block text-sm font-medium text-muted">Source Name</label>
             <input
@@ -332,13 +420,13 @@ function EventDetailPage() {
             />
           </div>
           <button type="submit" className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">
-            {editingFundingId ? 'Update Source' : 'Save Source'}
+            {isEditingFunding ? 'Update Source' : 'Save Source'}
           </button>
         </form>
       </Modal>
 
       <Modal
-        title={editingCategoryId ? 'Edit Category' : 'Add Category'}
+        title={isEditingCategory ? 'Edit Category' : 'Add Category'}
         isOpen={isCategoryModalOpen}
         onClose={() => {
           clearErrors()
@@ -346,6 +434,9 @@ function EventDetailPage() {
         }}
       >
         <form onSubmit={handleCategorySubmit} className="space-y-4">
+          {operationError ? (
+            <AlertBox title="Update failed" message={operationError} variant="warning" />
+          ) : null}
           <div>
             <label className="mb-1 block text-sm font-medium text-muted">Category Name</label>
             <input
@@ -384,7 +475,65 @@ function EventDetailPage() {
             />
           </div>
           <button type="submit" className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white">
-            {editingCategoryId ? 'Update Category' : 'Save Category'}
+            {isEditingCategory ? 'Update Category' : 'Save Category'}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        title="Close Event"
+        isOpen={isCloseModalOpen}
+        onClose={() => {
+          clearErrors()
+          setCloseModalOpen(false)
+        }}
+      >
+        <form onSubmit={handleCloseEventSubmit} className="space-y-4">
+          {operationError ? (
+            <AlertBox title="Close failed" message={operationError} variant="warning" />
+          ) : null}
+          <p className="text-sm text-muted">
+            Closing this event will lock updates for event details, funding sources, and categories.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 rounded-md border border-line bg-slate-50 p-3 text-sm">
+            <p className="text-muted">Total Budget</p>
+            <p className="text-right font-semibold text-text">{formatCurrency(event.metrics.totalBudget)}</p>
+            <p className="text-muted">Total Liability</p>
+            <p className="text-right font-semibold text-text">{formatCurrency(event.metrics.totalLiability)}</p>
+            <p className="text-muted">Total Paid</p>
+            <p className="text-right font-semibold text-text">{formatCurrency(event.metrics.paid)}</p>
+            <p className="text-muted">Total Pending</p>
+            <p
+              className={`text-right font-semibold ${event.metrics.pending > 0 ? 'text-warning' : 'text-text'}`}
+            >
+              {formatCurrency(event.metrics.pending)}
+            </p>
+          </div>
+
+          {event.metrics.pending > 0 ? (
+            <AlertBox
+              title="Pending amount exists"
+              message="Event can still be closed, but pending amount will remain outstanding."
+              variant="warning"
+            />
+          ) : null}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-muted">Closing Note (Optional)</label>
+            <textarea
+              rows={3}
+              value={closeForm.closingNote}
+              onChange={(submitEvent) =>
+                setCloseForm((previous) => ({ ...previous, closingNote: submitEvent.target.value }))
+              }
+              className="w-full rounded-md border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              placeholder="Reason or note for closing this event..."
+            />
+          </div>
+
+          <button type="submit" className="rounded-md bg-danger px-4 py-2 text-sm font-semibold text-white">
+            Confirm Close Event
           </button>
         </form>
       </Modal>
