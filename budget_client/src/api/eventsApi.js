@@ -23,18 +23,6 @@ export const updateEventApi = async (eventId, payload) => {
   return response.data.data
 }
 
-export const closeEventApi = async (eventId, payload = {}) => {
-  const response = await api.post(`/events/${eventId}/close`, {
-    closingNote: payload.closingNote || '',
-  })
-  return response.data
-}
-
-export const reopenEventApi = async (eventId) => {
-  const response = await api.post(`/events/${eventId}/reopen`)
-  return response.data
-}
-
 export const addFundingSourceApi = async (eventId, source) => {
   const response = await api.post(`/events/${eventId}/funding-sources`, {
     name: source.name,

@@ -5,7 +5,6 @@ import EventDetailPage from './pages/EventDetailPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 import LoginPage from './pages/LoginPage'
-import AdminAuditPage from './pages/AdminAuditPage'
 import ProtectedLayout from './routes/ProtectedLayout'
 
 function App() {
@@ -18,7 +17,6 @@ function App() {
         <Route path="events/:eventId" element={<EventDetailPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="admin/audit-logs" element={<AdminAuditPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

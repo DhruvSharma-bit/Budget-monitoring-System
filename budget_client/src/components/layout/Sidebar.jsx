@@ -1,10 +1,16 @@
 import { NavLink } from 'react-router-dom'
-import { useBudget } from '../../context/BudgetContext'
 
-function SidebarLinks({ items, onItemClick, isCollapsed = false }) {
+const navigation = [
+  { label: 'Dashboard', short: 'D', to: '/' },
+  { label: 'Events', short: 'E', to: '/events' },
+  { label: 'Reports', short: 'R', to: '/reports' },
+  { label: 'Settings', short: 'S', to: '/settings' },
+]
+
+function SidebarLinks({ onItemClick, isCollapsed = false }) {
   return (
     <nav className="space-y-2">
-      {items.map((item) => (
+      {navigation.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}
@@ -33,17 +39,6 @@ function SidebarLinks({ items, onItemClick, isCollapsed = false }) {
 }
 
 function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
-  const { currentUserRole } = useBudget()
-  const navigation = [
-    { label: 'Dashboard', short: 'D', to: '/' },
-    { label: 'Events', short: 'E', to: '/events' },
-    { label: 'Reports', short: 'R', to: '/reports' },
-    ...(currentUserRole === 'admin'
-      ? [{ label: 'Audit Logs', short: 'A', to: '/admin/audit-logs' }]
-      : []),
-    { label: 'Settings', short: 'S', to: '/settings' },
-  ]
-
   return (
     <>
       <aside
@@ -78,7 +73,7 @@ function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
         {isCollapsed ? null : (
           <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-muted">Navigation</p>
         )}
-        <SidebarLinks items={navigation} isCollapsed={isCollapsed} />
+        <SidebarLinks isCollapsed={isCollapsed} />
       </aside>
 
       {isOpen ? (
@@ -101,7 +96,7 @@ function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }) {
               </button>
             </div>
             <p className="mb-2 px-2 text-xs font-semibold uppercase tracking-wide text-muted">Navigation</p>
-            <SidebarLinks items={navigation} onItemClick={onClose} />
+            <SidebarLinks onItemClick={onClose} />
           </aside>
         </div>
       ) : null}

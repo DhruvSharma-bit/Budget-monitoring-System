@@ -3,10 +3,8 @@ import { getMeApi, loginApi } from '../api/authApi'
 import {
   addCategoryApi,
   addFundingSourceApi,
-  closeEventApi,
   createEventApi,
   listEventsApi,
-  reopenEventApi,
   updateCategoryApi,
   updateEventApi,
   updateFundingSourceApi,
@@ -22,7 +20,6 @@ import {
 
 const BudgetContext = createContext(null)
 const ADMIN_ROLE = 'admin'
-const FINANCE_ROLE = 'finance'
 
 const normalizeAmount = (value) => Number(value || 0)
 const initialUser = { id: '', name: '', email: '', role: 'guest' }
@@ -34,19 +31,9 @@ const toDateInput = (value) => {
 }
 
 const normalizeEvent = (event) => {
-  const lifecycleStatusRaw = String(event.lifecycleStatus || event.status || 'ACTIVE')
-    .trim()
-    .toUpperCase()
-  const lifecycleStatus = lifecycleStatusRaw === 'CLOSED' ? 'CLOSED' : 'ACTIVE'
-
   const normalized = {
     ...event,
     date: toDateInput(event.date || event.eventDate),
-    status: lifecycleStatus,
-    lifecycleStatus,
-    closedAt: event.closedAt || event.closed_at || null,
-    closedBy: event.closedBy || event.closed_by || null,
-    closingNote: event.closingNote || event.closing_note || '',
     fundingSources: (event.fundingSources || []).map((source) => ({
       ...source,
       amount: normalizeAmount(source.amount),
@@ -77,8 +64,6 @@ export function BudgetProvider({ children }) {
   const currentUserRole = currentUser.role || 'guest'
   const isAuthenticated = Boolean(currentUser.id)
   const canEdit = currentUserRole === ADMIN_ROLE
-  const canCloseEvent = [ADMIN_ROLE, FINANCE_ROLE].includes(currentUserRole)
-  const canReopenEvent = currentUserRole === ADMIN_ROLE
 
   useEffect(() => {
     let mounted = true
@@ -100,7 +85,7 @@ export function BudgetProvider({ children }) {
               role: profile.role || 'user',
             })
           }
-        } catch {
+        } catch (error) {
           setStoredToken(null)
           if (mounted) {
             setCurrentUser(initialUser)
@@ -120,7 +105,7 @@ export function BudgetProvider({ children }) {
           setEvents(remoteEvents.map(normalizeEvent))
           setDataSource('api')
         }
-      } catch {
+      } catch (error) {
         if (mounted) {
           setEvents(initialEvents.map(normalizeEvent))
           setDataSource('mock')
@@ -142,24 +127,6 @@ export function BudgetProvider({ children }) {
   const requireAdminAccess = () => {
     if (currentUserRole !== ADMIN_ROLE) {
       throw new Error('Only admin can edit budget data.')
-    }
-  }
-
-  const requireCloseAccess = () => {
-    if (![ADMIN_ROLE, FINANCE_ROLE].includes(currentUserRole)) {
-      throw new Error('Only admin or finance role can close an event.')
-    }
-  }
-
-  const getEventById = (eventId) => events.find((event) => event.id === eventId)
-
-  const requireEventEditable = (eventId) => {
-    const target = getEventById(eventId)
-    if (!target) {
-      throw new Error('Event not found')
-    }
-    if (String(target.lifecycleStatus || '').toUpperCase() === 'CLOSED') {
-      throw new Error('This event is CLOSED and cannot be modified.')
     }
   }
 
@@ -210,7 +177,6 @@ export function BudgetProvider({ children }) {
     try {
       setOperationError('')
       requireAdminAccess()
-      requireEventEditable(eventId)
       if (dataSource === 'api') {
         const updated = await updateEventApi(eventId, payload)
         upsertEventInState(updated)
@@ -244,7 +210,6 @@ export function BudgetProvider({ children }) {
     try {
       setOperationError('')
       requireAdminAccess()
-      requireEventEditable(eventId)
       if (dataSource === 'api') {
         const updated = await addFundingSourceApi(eventId, source)
         upsertEventInState(updated)
@@ -279,7 +244,6 @@ export function BudgetProvider({ children }) {
     try {
       setOperationError('')
       requireAdminAccess()
-      requireEventEditable(eventId)
       if (dataSource === 'api') {
         const updated = await updateFundingSourceApi(eventId, sourceId, payload)
         upsertEventInState(updated)
@@ -315,7 +279,6 @@ export function BudgetProvider({ children }) {
     try {
       setOperationError('')
       requireAdminAccess()
-      requireEventEditable(eventId)
       if (dataSource === 'api') {
         const updated = await addCategoryApi(eventId, category)
         upsertEventInState(updated)
@@ -351,7 +314,6 @@ export function BudgetProvider({ children }) {
     try {
       setOperationError('')
       requireAdminAccess()
-      requireEventEditable(eventId)
       if (dataSource === 'api') {
         const updated = await updateCategoryApi(eventId, categoryId, payload)
         upsertEventInState(updated)
@@ -379,93 +341,6 @@ export function BudgetProvider({ children }) {
       return { success: true }
     } catch (error) {
       const message = parseErrorMessage(error, 'Failed to update category')
-      setOperationError(message)
-      return { success: false, message }
-    }
-  }
-
-  const closeEvent = async (eventId, payload = {}) => {
-    try {
-      setOperationError('')
-      requireCloseAccess()
-      requireEventEditable(eventId)
-
-      if (dataSource === 'api') {
-        const response = await closeEventApi(eventId, payload)
-        upsertEventInState(response.data)
-        if (response.warning?.message) {
-          setOperationError(response.warning.message)
-        }
-        return { success: true, warning: response.warning || null, message: response.message }
-      }
-
-      const target = getEventById(eventId)
-      if (!target) {
-        throw new Error('Event not found')
-      }
-      const pending = Number(target.metrics?.pending || 0)
-      const warning =
-        pending > 0
-          ? {
-              code: 'EVENT_CLOSED_WITH_PENDING',
-              message: `Event closed with pending amount ${pending}.`,
-            }
-          : null
-
-      const now = new Date().toISOString()
-      setEvents((previous) =>
-        previous.map((event) =>
-          event.id === eventId
-            ? normalizeEvent({
-                ...event,
-                lifecycleStatus: 'CLOSED',
-                status: 'CLOSED',
-                closedAt: now,
-                closedBy: currentUser.email || currentUser.name || currentUser.id,
-                closingNote: payload.closingNote || '',
-              })
-            : event,
-        ),
-      )
-      if (warning?.message) {
-        setOperationError(warning.message)
-      }
-      return { success: true, warning, message: 'Event closed successfully' }
-    } catch (error) {
-      const message = parseErrorMessage(error, 'Failed to close event')
-      setOperationError(message)
-      return { success: false, message }
-    }
-  }
-
-  const reopenEvent = async (eventId) => {
-    try {
-      setOperationError('')
-      requireAdminAccess()
-
-      if (dataSource === 'api') {
-        const response = await reopenEventApi(eventId)
-        upsertEventInState(response.data)
-        return { success: true, message: response.message }
-      }
-
-      setEvents((previous) =>
-        previous.map((event) =>
-          event.id === eventId
-            ? normalizeEvent({
-                ...event,
-                lifecycleStatus: 'ACTIVE',
-                status: 'ACTIVE',
-                closedAt: null,
-                closedBy: null,
-                closingNote: '',
-              })
-            : event,
-        ),
-      )
-      return { success: true, message: 'Event reopened successfully' }
-    } catch (error) {
-      const message = parseErrorMessage(error, 'Failed to reopen event')
       setOperationError(message)
       return { success: false, message }
     }
@@ -521,8 +396,6 @@ export function BudgetProvider({ children }) {
     currentUser,
     currentUserRole,
     canEdit,
-    canCloseEvent,
-    canReopenEvent,
     authError,
     operationError,
     dashboardMetrics,
@@ -542,8 +415,6 @@ export function BudgetProvider({ children }) {
     updateFundingSource,
     addCategory,
     updateCategory,
-    closeEvent,
-    reopenEvent,
   }
 
   return <BudgetContext.Provider value={value}>{children}</BudgetContext.Provider>

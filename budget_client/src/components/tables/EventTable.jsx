@@ -11,7 +11,7 @@ function EventTable({
 }) {
   return (
     <div className={`overflow-auto ${maxHeightClass}`}>
-      <table className="min-w-[1240px] border-separate border-spacing-0">
+      <table className="min-w-[1150px] border-separate border-spacing-0">
         <thead>
           <tr className="table-head">
             <th className="sticky top-0 z-10 px-4 py-3">Event</th>
@@ -22,16 +22,13 @@ function EventTable({
             <th className="sticky top-0 z-10 px-4 py-3">Pending</th>
             <th className="sticky top-0 z-10 px-4 py-3">Remaining</th>
             <th className="sticky top-0 z-10 px-4 py-3">Paid Progress</th>
-            <th className="sticky top-0 z-10 px-4 py-3">Lifecycle</th>
             <th className="sticky top-0 z-10 px-4 py-3">Status</th>
             <th className="sticky top-0 z-10 px-4 py-3">Actions</th>
           </tr>
         </thead>
         <tbody className="bg-white">
-          {events.map((event) => {
-            const isClosed = String(event.lifecycleStatus || event.status || 'ACTIVE').toUpperCase() === 'CLOSED'
-            return (
-              <tr key={event.id} className="border-b border-line hover:bg-slate-50/60">
+          {events.map((event) => (
+            <tr key={event.id} className="border-b border-line hover:bg-slate-50/60">
               <td className="table-cell font-medium">{event.name}</td>
               <td className="table-cell">{formatDate(event.date)}</td>
               <td className="table-cell">{formatCurrency(event.metrics.totalBudget)}</td>
@@ -47,9 +44,6 @@ function EventTable({
                 />
               </td>
               <td className="table-cell">
-                <StatusBadge status={String(event.lifecycleStatus || event.status || 'ACTIVE').toUpperCase()} />
-              </td>
-              <td className="table-cell">
                 <StatusBadge status={event.metrics.status} />
               </td>
               <td className="table-cell">
@@ -61,7 +55,7 @@ function EventTable({
                   >
                     View
                   </button>
-                  {canEdit && onEditEvent && !isClosed ? (
+                  {canEdit && onEditEvent ? (
                     <button
                       type="button"
                       onClick={() => onEditEvent(event)}
@@ -73,8 +67,7 @@ function EventTable({
                 </div>
               </td>
             </tr>
-            )
-          })}
+          ))}
         </tbody>
       </table>
     </div>
