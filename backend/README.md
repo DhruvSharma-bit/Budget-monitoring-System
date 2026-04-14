@@ -2,26 +2,40 @@
 
 ## 1. Setup
 
-1. Copy `.env.example` to `.env`
-2. Set PostgreSQL URL for your `budget_system` database:
+1. Start PostgreSQL (from repository root):
+
+```bash
+docker compose up -d postgres
+```
+
+2. Copy `.env.example` to `.env`
+3. Set PostgreSQL URL for your `budget_system` database:
 
 ```env
 DIRECT_DATABASE_URL="postgresql://postgres:your_password@localhost:5432/budget_system?schema=public"
 ```
 
-3. Install dependencies:
+If using the provided Docker setup, the default password is `password`.
+
+4. Install dependencies:
 
 ```bash
 npm install
 ```
 
-4. Start backend:
+5. Start backend:
 
 ```bash
 npm run dev
 ```
 
 Base API URL: `http://localhost:4000/api`
+
+To stop PostgreSQL later:
+
+```bash
+docker compose down
+```
 
 ## 2. Manual Tables Expected
 
